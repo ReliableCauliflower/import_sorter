@@ -1,4 +1,3 @@
-// 🎯 Dart imports:
 import 'dart:io';
 
 /// Sort the imports
@@ -8,20 +7,9 @@ import 'dart:io';
 ImportSortData sortImports(
   List<String> lines,
   String package_name,
-  bool emojis,
-  bool exitIfChanged,
-  bool noComments, {
+  bool exitIfChanged, {
   String? filePath,
 }) {
-  String dartImportComment(bool emojis) =>
-      '//${emojis ? ' 🎯 ' : ' '}Dart imports:';
-  String flutterImportComment(bool emojis) =>
-      '//${emojis ? ' 🐦 ' : ' '}Flutter imports:';
-  String packageImportComment(bool emojis) =>
-      '//${emojis ? ' 📦 ' : ' '}Package imports:';
-  String projectImportComment(bool emojis) =>
-      '//${emojis ? ' 🌎 ' : ' '}Project imports:';
-
   final beforeImportLines = <String>[];
   final afterImportLines = <String>[];
 
@@ -62,18 +50,6 @@ ImportSortData sortImports(
       } else {
         projectRelativeImports.add(lines[i]);
       }
-    } else if (i != lines.length - 1 &&
-        (lines[i] == dartImportComment(false) ||
-            lines[i] == flutterImportComment(false) ||
-            lines[i] == packageImportComment(false) ||
-            lines[i] == projectImportComment(false) ||
-            lines[i] == dartImportComment(true) ||
-            lines[i] == flutterImportComment(true) ||
-            lines[i] == packageImportComment(true) ||
-            lines[i] == projectImportComment(true) ||
-            lines[i] == '// 📱 Flutter imports:') &&
-        lines[i + 1].startsWith('import ') &&
-        lines[i + 1].endsWith(';')) {
     } else if (noImports()) {
       beforeImportLines.add(lines[i]);
     } else {
@@ -106,13 +82,11 @@ ImportSortData sortImports(
     sortedLines.add('');
   }
   if (dartImports.isNotEmpty) {
-    if (!noComments) sortedLines.add(dartImportComment(emojis));
     dartImports.sort();
     sortedLines.addAll(dartImports);
   }
   if (flutterImports.isNotEmpty) {
     if (dartImports.isNotEmpty) sortedLines.add('');
-    if (!noComments) sortedLines.add(flutterImportComment(emojis));
     flutterImports.sort();
     sortedLines.addAll(flutterImports);
   }
@@ -120,7 +94,6 @@ ImportSortData sortImports(
     if (dartImports.isNotEmpty || flutterImports.isNotEmpty) {
       sortedLines.add('');
     }
-    if (!noComments) sortedLines.add(packageImportComment(emojis));
     packageImports.sort();
     sortedLines.addAll(packageImports);
   }
@@ -130,7 +103,6 @@ ImportSortData sortImports(
         packageImports.isNotEmpty) {
       sortedLines.add('');
     }
-    if (!noComments) sortedLines.add(projectImportComment(emojis));
     projectImports.sort();
     projectRelativeImports.sort();
     sortedLines.addAll(projectImports);

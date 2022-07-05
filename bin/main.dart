@@ -1,12 +1,10 @@
-// 🎯 Dart imports:
 import 'dart:io';
 
-// 📦 Package imports:
 import 'package:args/args.dart';
+import 'package:import_sorter/dart_file.dart';
 import 'package:tint/tint.dart';
 import 'package:yaml/yaml.dart';
 
-// 🌎 Project imports:
 import 'package:import_sorter/args.dart' as local_args;
 import 'package:import_sorter/files.dart' as files;
 import 'package:import_sorter/sort.dart' as sort;
@@ -33,8 +31,6 @@ void main(List<String> args) {
   final pubspecYamlFile = File('${currentPath}/pubspec.yaml');
   final pubspecYaml = loadYaml(pubspecYamlFile.readAsStringSync());
 
-  // Getting all dependencies and project package name
-  final packageName = pubspecYaml['name'];
   final dependencies = [];
 
   final stopwatch = Stopwatch();
@@ -44,83 +40,87 @@ void main(List<String> args) {
   final pubspecLock = loadYaml(pubspecLockFile.readAsStringSync());
   dependencies.addAll(pubspecLock['packages'].keys);
 
-  var emojis = false;
-  var noComments = false;
-  final ignored_files = [];
+  final ignoredFiles = [];
+  final additionalPaths = <String>[];
 
   // Reading from config in pubspec.yaml safely
   if (!argResults.contains('--ignore-config')) {
     if (pubspecYaml.containsKey('import_sorter')) {
       final config = pubspecYaml['import_sorter'];
-      if (config.containsKey('emojis')) emojis = config['emojis'];
-      if (config.containsKey('comments')) noComments = !config['comments'];
       if (config.containsKey('ignored_files')) {
-        ignored_files.addAll(config['ignored_files']);
+        ignoredFiles.addAll(config['ignored_files']);
+      }
+      if (config.containsKey('additional_paths')) {
+        final yamlList = config['additional_paths'];
+        additionalPaths.addAll(List<String>.from(yamlList));
       }
     }
   }
 
-  // Setting values from args
-  if (!emojis) emojis = argResults.contains('-e');
-  if (!noComments) noComments = argResults.contains('--no-comments');
   final exitOnChange = argResults.contains('--exit-if-changed');
 
   // Getting all the dart files for the project
-  final dartFiles = files.dartFiles(currentPath, args);
+  final dartFiles = files.dartFiles(
+    currentPath: currentPath,
+    args: args,
+    additionalPaths: additionalPaths,
+    basePackageName: pubspecYaml['name'],
+  );
   final containsFlutter = dependencies.contains('flutter');
-  final containsRegistrant = dartFiles
-      .containsKey('${currentPath}/lib/generated_plugin_registrant.dart');
-
-  stdout.writeln('contains flutter: ${containsFlutter}');
-  stdout.writeln('contains registrant: ${containsRegistrant}');
-
-  if (containsFlutter && containsRegistrant) {
-    dartFiles.remove('${currentPath}/lib/generated_plugin_registrant.dart');
+  if (containsFlutter) {
+    final List<DartFile> filesToRemove = [];
+    for (final dartFile in dartFiles) {
+      if (dartFile.file.path.endsWith('generated_plugin_registrant.dart')) {
+        filesToRemove.add(dartFile);
+      }
+    }
+    dartFiles.removeWhere((file) => filesToRemove.contains(file));
   }
 
-  for (final pattern in ignored_files) {
-    dartFiles.removeWhere((key, _) =>
-        RegExp(pattern).hasMatch(key.replaceFirst(currentPath, '')));
+  for (final pattern in ignoredFiles) {
+    dartFiles.removeWhere((file) =>
+        RegExp(pattern).hasMatch(file.file.path.replaceFirst(currentPath, '')));
   }
 
   stdout.write('┏━━ Sorting ${dartFiles.length} dart files');
 
   // Sorting and writing to files
-  final sortedFiles = [];
+  final sortedFilesPaths = <String>[];
   final success = '✔'.green();
 
-  for (final filePath in dartFiles.keys) {
-    final file = dartFiles[filePath];
-    if (file == null) {
-      continue;
-    }
+  for (final dartFile in dartFiles) {
+    final file = dartFile.file;
+    final filePath = file.path;
 
     final sortedFile = sort.sortImports(
-        file.readAsLinesSync(), packageName, emojis, exitOnChange, noComments);
+      file.readAsLinesSync(),
+      dartFile.packageName,
+      exitOnChange,
+    );
     if (!sortedFile.updated) {
       continue;
     }
-    dartFiles[filePath]?.writeAsStringSync(sortedFile.sortedFile);
-    sortedFiles.add(filePath);
+    file.writeAsStringSync(sortedFile.sortedFile);
+    sortedFilesPaths.add(filePath);
   }
 
   stopwatch.stop();
 
   // Outputting results
-  if (sortedFiles.length > 1) {
+  if (sortedFilesPaths.length > 1) {
     stdout.write("\n");
   }
-  for (int i = 0; i < sortedFiles.length; i++) {
-    final file = dartFiles[sortedFiles[i]];
+  for (int i = 0; i < sortedFilesPaths.length; i++) {
+    final filePath = sortedFilesPaths[i];
     stdout.write(
-        '${sortedFiles.length == 1 ? '\n' : ''}┃  ${i == sortedFiles.length - 1 ? '┗' : '┣'}━━ ${success} Sorted imports for ${file?.path.replaceFirst(currentPath, '')}/');
-    String filename = file!.path.split(Platform.pathSeparator).last;
+        '${sortedFilesPaths.length == 1 ? '\n' : ''}┃  ${i == sortedFilesPaths.length - 1 ? '┗' : '┣'}━━ ${success} Sorted imports for ${filePath.replaceFirst(currentPath, '')}/');
+    String filename = filePath.split(Platform.pathSeparator).last;
     stdout.write(filename + "\n");
   }
 
-  if (sortedFiles.length == 0) {
+  if (sortedFilesPaths.length == 0) {
     stdout.write("\n");
   }
   stdout.write(
-      '┗━━ ${success} Sorted ${sortedFiles.length} files in ${stopwatch.elapsed.inSeconds}.${stopwatch.elapsedMilliseconds} seconds\n');
+      '┗━━ ${success} Sorted ${sortedFilesPaths.length} files in ${stopwatch.elapsed.inSeconds}.${stopwatch.elapsedMilliseconds} seconds\n');
 }

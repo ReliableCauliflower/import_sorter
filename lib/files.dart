@@ -1,9 +1,21 @@
-// 🎯 Dart imports:
 import 'dart:io';
 
+import 'package:yaml/yaml.dart';
+
+import 'dart_file.dart';
+
 /// Get all the dart files for the project and the contents
-Map<String, File> dartFiles(String currentPath, List<String> args) {
-  final dartFiles = <String, File>{};
+List<DartFile> dartFiles({
+  required String currentPath,
+  required List<String> args,
+  required List<String> additionalPaths,
+  required String basePackageName,
+}) {
+  final dartFiles = <DartFile>[];
+  final additionalPathsFileEntities = <FileSystemEntity>[];
+  for (final path in additionalPaths) {
+    additionalPathsFileEntities.addAll(_readDir(currentPath, path));
+  }
   final allContents = [
     ..._readDir(currentPath, 'lib'),
     ..._readDir(currentPath, 'bin'),
@@ -11,11 +23,32 @@ Map<String, File> dartFiles(String currentPath, List<String> args) {
     ..._readDir(currentPath, 'tests'),
     ..._readDir(currentPath, 'test_driver'),
     ..._readDir(currentPath, 'integration_test'),
+    ...additionalPathsFileEntities,
   ];
 
-  for (final fileOrDir in allContents) {
-    if (fileOrDir is File && fileOrDir.path.endsWith('.dart')) {
-      dartFiles[fileOrDir.path] = fileOrDir;
+  String lastPackageDirPath = currentPath;
+  String packageName = basePackageName;
+  for (final fileSysEntity in allContents) {
+    if (fileSysEntity is File) {
+      final filePath = fileSysEntity.path;
+      if (filePath.endsWith('.dart')) {
+        if (!filePath.startsWith(lastPackageDirPath)) {
+          packageName = basePackageName;
+        }
+        dartFiles.add(DartFile(fileSysEntity, packageName));
+      } else if (filePath.endsWith('pubspec.yaml')) {
+        try {
+          final pubspecYaml = loadYaml(fileSysEntity.readAsStringSync());
+          final pubspecPackageName = pubspecYaml['name'];
+          if (pubspecPackageName != null) {
+            packageName = pubspecPackageName;
+            lastPackageDirPath = fileSysEntity.parent.path;
+          }
+        } catch (e) {
+          stdout.write('An error occured parsing the $filePath:\n$e');
+          continue;
+        }
+      }
     }
   }
 
@@ -29,18 +62,18 @@ Map<String, File> dartFiles(String currentPath, List<String> args) {
 
   if (onlyCertainFiles) {
     final patterns = args.where((arg) => !arg.startsWith("-"));
-    final filesToKeep = <String, File>{};
+    final filesToKeep = <DartFile>[];
 
-    for (final fileName in dartFiles.keys) {
+    for (final file in dartFiles) {
       var keep = false;
       for (final pattern in patterns) {
-        if (RegExp(pattern).hasMatch(fileName)) {
+        if (RegExp(pattern).hasMatch(file.file.path)) {
           keep = true;
           break;
         }
       }
       if (keep) {
-        filesToKeep[fileName] = File(fileName);
+        filesToKeep.add(file);
       }
     }
     return filesToKeep;
@@ -50,8 +83,9 @@ Map<String, File> dartFiles(String currentPath, List<String> args) {
 }
 
 List<FileSystemEntity> _readDir(String currentPath, String name) {
-  if (Directory('$currentPath/$name').existsSync()) {
-    return Directory('$currentPath/$name').listSync(recursive: true);
+  final dir = Directory('$currentPath/$name');
+  if (dir.existsSync()) {
+    return dir.listSync(recursive: true);
   }
   return [];
 }
