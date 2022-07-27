@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:path/path.dart';
 import 'package:yaml/yaml.dart';
 
 import 'dart_file.dart';
@@ -9,6 +10,7 @@ List<DartFile> dartFiles({
   required String currentPath,
   required List<String> args,
   required List<String> additionalPaths,
+  required List<String> ignorePaths,
   required String basePackageName,
 }) {
   final dartFiles = <DartFile>[];
@@ -28,9 +30,23 @@ List<DartFile> dartFiles({
 
   String lastPackageDirPath = currentPath;
   String packageName = basePackageName;
+
+  dirContentsLoop:
   for (final fileSysEntity in allContents) {
     if (fileSysEntity is File) {
       final filePath = fileSysEntity.path;
+      String relativePath = filePath.replaceFirst(currentPath, '');
+      if (relativePath.startsWith(separator)) {
+        relativePath = relativePath.replaceRange(0, 1, '');
+      }
+      for (String ignorePath in ignorePaths) {
+        if (ignorePath.startsWith(separator)) {
+          ignorePath = ignorePath.replaceRange(0, 1, '');
+        }
+        if (relativePath.startsWith(ignorePath)) {
+          continue dirContentsLoop;
+        }
+      }
       if (filePath.endsWith('.dart')) {
         if (!filePath.startsWith(lastPackageDirPath)) {
           packageName = basePackageName;

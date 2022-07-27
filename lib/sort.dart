@@ -8,7 +8,7 @@ import 'package:path/path.dart';
 /// at index 1
 ImportSortData sortImports(
   List<String> lines,
-  String package_name,
+  String packageName,
   bool exitIfChanged,
   String filePath,
 ) {
@@ -40,7 +40,7 @@ ImportSortData sortImports(
     final line = lines[i];
     const packageImportStart = 'package:';
     const flutterPackageImportStart = 'package:flutter/';
-    final relativePackageImportStart = 'package:$package_name/';
+    final relativePackageImportStart = 'package:$packageName/';
 
     // If line is an import line
     if (line.startsWith('import ') &&
@@ -55,15 +55,14 @@ ImportSortData sortImports(
             relativePackageImportStart.length;
         final packageRelativePath =
             line.substring(packagePathIndex, line.lastIndexOf("'"));
-        if (packageRelativePath.startsWith(package_name)) {
+        if (packageRelativePath.startsWith(packageName)) {
           projectImports.add(line);
         } else {
-          final packageEntryIndex = filePath.lastIndexOf('$package_name/lib/');
+          final packageEntryIndex = filePath.lastIndexOf('lib/');
           if (packageEntryIndex < 0) {
             projectImports.add(line);
           } else {
-            final relativePathStartIndex =
-                packageEntryIndex + package_name.length + 5;
+            final relativePathStartIndex = packageEntryIndex + 4;
             final fileRelativePath = filePath.substring(relativePathStartIndex);
             projectRelativeImports.add(
               _packageRelativeImportFromPaths(

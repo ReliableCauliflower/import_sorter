@@ -38,19 +38,18 @@ void main(List<String> args) {
   final pubspecLock = loadYaml(pubspecLockFile.readAsStringSync());
   dependencies.addAll(pubspecLock['packages'].keys);
 
-  final ignoredFiles = [];
+  final ignorePaths = <String>[];
   final additionalPaths = <String>[];
 
   // Reading from config in pubspec.yaml safely
   if (!argResults.contains('--ignore-config')) {
     if (pubspecYaml.containsKey('import_sorter')) {
       final config = pubspecYaml['import_sorter'];
-      if (config.containsKey('ignored_files')) {
-        ignoredFiles.addAll(config['ignored_files']);
+      if (config.containsKey('ignore_paths')) {
+        ignorePaths.addAll(List<String>.from(config['ignore_paths']));
       }
       if (config.containsKey('additional_paths')) {
-        final yamlList = config['additional_paths'];
-        additionalPaths.addAll(List<String>.from(yamlList));
+        additionalPaths.addAll(List<String>.from(config['additional_paths']));
       }
     }
   }
@@ -62,6 +61,7 @@ void main(List<String> args) {
     currentPath: currentPath,
     args: args,
     additionalPaths: additionalPaths,
+    ignorePaths: ignorePaths,
     basePackageName: pubspecYaml['name'],
   );
   final containsFlutter = dependencies.contains('flutter');
@@ -73,11 +73,6 @@ void main(List<String> args) {
       }
     }
     dartFiles.removeWhere((file) => filesToRemove.contains(file));
-  }
-
-  for (final pattern in ignoredFiles) {
-    dartFiles.removeWhere((file) =>
-        RegExp(pattern).hasMatch(file.file.path.replaceFirst(currentPath, '')));
   }
 
   stdout.write('┏━━ Sorting ${dartFiles.length} dart files');
