@@ -1,5 +1,7 @@
 import 'dart:io';
 
+import 'package:path/path.dart';
+
 /// Sort the imports
 /// Returns the sorted file as a string at
 /// index 0 and the number of sorted imports
@@ -7,9 +9,9 @@ import 'dart:io';
 ImportSortData sortImports(
   List<String> lines,
   String package_name,
-  bool exitIfChanged, {
-  String? filePath,
-}) {
+  bool exitIfChanged,
+  String filePath,
+) {
   final beforeImportLines = <String>[];
   final afterImportLines = <String>[];
 
@@ -35,25 +37,51 @@ ImportSortData sortImports(
       isMultiLineString = !isMultiLineString;
     }
 
+    final line = lines[i];
+    const packageImportStart = 'package:';
+    const flutterPackageImportStart = 'package:flutter/';
+    final relativePackageImportStart = 'package:$package_name/';
+
     // If line is an import line
-    if (lines[i].startsWith('import ') &&
-        lines[i].endsWith(';') &&
+    if (line.startsWith('import ') &&
+        line.endsWith(';') &&
         !isMultiLineString) {
-      if (lines[i].contains('dart:')) {
+      if (line.contains('dart:')) {
         dartImports.add(lines[i]);
-      } else if (lines[i].contains('package:flutter/')) {
-        flutterImports.add(lines[i]);
-      } else if (lines[i].contains('package:$package_name/')) {
-        projectImports.add(lines[i]);
-      } else if (lines[i].contains('package:')) {
-        packageImports.add(lines[i]);
+      } else if (line.contains(flutterPackageImportStart)) {
+        flutterImports.add(line);
+      } else if (line.contains(relativePackageImportStart)) {
+        final packagePathIndex = line.indexOf(relativePackageImportStart) +
+            relativePackageImportStart.length;
+        final packageRelativePath =
+            line.substring(packagePathIndex, line.lastIndexOf("'"));
+        if (packageRelativePath.startsWith(package_name)) {
+          projectImports.add(line);
+        } else {
+          final packageEntryIndex = filePath.lastIndexOf('$package_name/lib/');
+          if (packageEntryIndex < 0) {
+            projectImports.add(line);
+          } else {
+            final relativePathStartIndex =
+                packageEntryIndex + package_name.length + 5;
+            final fileRelativePath = filePath.substring(relativePathStartIndex);
+            projectRelativeImports.add(
+              _packageRelativeImportFromPaths(
+                packageRelativePath,
+                fileRelativePath,
+              ),
+            );
+          }
+        }
+      } else if (line.contains(packageImportStart)) {
+        packageImports.add(line);
       } else {
-        projectRelativeImports.add(lines[i]);
+        projectRelativeImports.add(line);
       }
     } else if (noImports()) {
-      beforeImportLines.add(lines[i]);
+      beforeImportLines.add(line);
     } else {
-      afterImportLines.add(lines[i]);
+      afterImportLines.add(line);
     }
   }
 
@@ -126,10 +154,6 @@ ImportSortData sortImports(
   final sortedFile = sortedLines.join('\n');
   final original = lines.join('\n') + '\n';
   if (exitIfChanged && original != sortedFile) {
-    if (filePath != null) {
-      stdout.writeln(
-          '\n┗━━🚨 File ${filePath} does not have its imports sorted.');
-    }
     exit(1);
   }
   if (original == sortedFile) {
@@ -137,6 +161,32 @@ ImportSortData sortImports(
   }
 
   return ImportSortData(sortedFile, true);
+}
+
+String _packageRelativeImportFromPaths(
+  String packageRelativePath,
+  String fileRelativePath,
+) {
+  final packageRelativePathList = split(packageRelativePath);
+  final fileRelativePathList = split(fileRelativePath);
+  for (int i = 0; i < fileRelativePathList.length; ++i) {
+    final filePathPart = fileRelativePathList[i];
+    final packagePathPart = packageRelativePathList[i];
+
+    if (filePathPart == packagePathPart) {
+      continue;
+    } else {
+      final packageRelativePath = joinAll([
+        '../' * (fileRelativePathList.length - i - 1),
+        ...packageRelativePathList.sublist(i),
+      ]);
+      return "import '$packageRelativePath';";
+    }
+  }
+  throw Exception(
+    'Failed to update package path ($packageRelativePath) '
+    'for the file ($fileRelativePath)',
+  );
 }
 
 /// Get the number of times a string contains another

@@ -1,22 +1,20 @@
 import 'dart:io';
 
 import 'package:args/args.dart';
-import 'package:import_sorter/dart_file.dart';
 import 'package:tint/tint.dart';
 import 'package:yaml/yaml.dart';
 
 import 'package:import_sorter/args.dart' as local_args;
+import 'package:import_sorter/dart_file.dart';
 import 'package:import_sorter/files.dart' as files;
 import 'package:import_sorter/sort.dart' as sort;
 
 void main(List<String> args) {
   // Parsing arguments
   final parser = ArgParser();
-  parser.addFlag('emojis', abbr: 'e', negatable: false);
   parser.addFlag('ignore-config', negatable: false);
   parser.addFlag('help', abbr: 'h', negatable: false);
   parser.addFlag('exit-if-changed', negatable: false);
-  parser.addFlag('no-comments', negatable: false);
   final argResults = parser.parse(args).arguments;
   if (argResults.contains('-h') || argResults.contains('--help')) {
     local_args.outputHelp();
@@ -96,6 +94,7 @@ void main(List<String> args) {
       file.readAsLinesSync(),
       dartFile.packageName,
       exitOnChange,
+      filePath,
     );
     if (!sortedFile.updated) {
       continue;
