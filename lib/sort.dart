@@ -130,9 +130,14 @@ ImportSortData sortImports(
         packageImports.isNotEmpty) {
       sortedLines.add('');
     }
+
     projectImports.sort();
     projectRelativeImports.sort();
-    sortedLines.addAll(projectImports);
+    sortedLines.addAll(
+      projectImports.map((import) {
+        return '// fixme: update to the relative import(s)\n$import';
+      }),
+    );
     sortedLines.addAll(projectRelativeImports);
   }
 
