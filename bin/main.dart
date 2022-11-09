@@ -1,94 +1,87 @@
 import 'dart:io';
 
-import 'package:args/args.dart';
-import 'package:tint/tint.dart';
+import 'package:pre_commit_helpers/pre_commit_helpers.dart';
 import 'package:yaml/yaml.dart';
 
-import 'package:import_sorter/args.dart' as local_args;
-import 'package:import_sorter/dart_file.dart';
-import 'package:import_sorter/files.dart' as files;
+import 'package:import_sorter/models/dart_file_info.dart';
 import 'package:import_sorter/sort.dart' as sort;
 
+const importSorterName = 'import_sorter';
+const ignorePathsName = 'ignore_paths';
+const additionalPathsName = 'additional_paths';
+const ignorePatternsName = 'ignore_patterns';
+
 void main(List<String> args) {
-  // Parsing arguments
-  final parser = ArgParser();
-  parser.addFlag('ignore-config', negatable: false);
-  parser.addFlag('help', abbr: 'h', negatable: false);
-  parser.addFlag('exit-if-changed', negatable: false);
-  final argResults = parser.parse(args).arguments;
-  if (argResults.contains('-h') || argResults.contains('--help')) {
-    local_args.outputHelp();
-  }
-
   final currentPath = Directory.current.path;
-  /*
-  Getting the package name and dependencies/dev_dependencies
-  Package name is one factor used to identify project imports
-  Dependencies/dev_dependencies names are used to identify package imports
-  */
-  final pubspecYamlFile = File('${currentPath}/pubspec.yaml');
-  final pubspecYaml = loadYaml(pubspecYamlFile.readAsStringSync());
 
-  final dependencies = [];
+  final pubspecPath = '${currentPath}/pubspec.yaml';
 
   final stopwatch = Stopwatch();
   stopwatch.start();
+
+  final dependencies = [];
 
   final pubspecLockFile = File('${currentPath}/pubspec.lock');
   final pubspecLock = loadYaml(pubspecLockFile.readAsStringSync());
   dependencies.addAll(pubspecLock['packages'].keys);
 
-  final ignorePaths = <String>[];
-  final additionalPaths = <String>[];
+  final ignorePaths = getArgList(
+    pubspecPath: pubspecPath,
+    configName: importSorterName,
+    argName: ignorePathsName,
+  );
+  final additionalPaths = getArgList(
+    pubspecPath: pubspecPath,
+    configName: importSorterName,
+    argName: additionalPathsName,
+  );
 
-  // Reading from config in pubspec.yaml safely
-  if (!argResults.contains('--ignore-config')) {
-    if (pubspecYaml.containsKey('import_sorter')) {
-      final config = pubspecYaml['import_sorter'];
-      if (config.containsKey('ignore_paths')) {
-        ignorePaths.addAll(List<String>.from(config['ignore_paths']));
-      }
-      if (config.containsKey('additional_paths')) {
-        additionalPaths.addAll(List<String>.from(config['additional_paths']));
-      }
-    }
-  }
-
-  final exitOnChange = argResults.contains('--exit-if-changed');
+  final ignorePatterns = getArgList(
+    pubspecPath: pubspecPath,
+    configName: importSorterName,
+    argName: ignorePatternsName,
+  );
 
   // Getting all the dart files for the project
-  final dartFiles = files.dartFiles(
+  final packagesData = getPackagesData(
     currentPath: currentPath,
-    args: args,
     additionalPaths: additionalPaths,
     ignorePaths: ignorePaths,
-    basePackageName: pubspecYaml['name'],
+    ignorePatterns: ignorePatterns,
   );
+  final List<DartFileInfo> dartFilesInfo = [];
+  for (final packageData in packagesData) {
+    for (final dartFile in packageData.dartFiles) {
+      dartFilesInfo.add(DartFileInfo(
+        file: dartFile,
+        packageName: packageData.packageName,
+      ));
+    }
+  }
   final containsFlutter = dependencies.contains('flutter');
   if (containsFlutter) {
-    final List<DartFile> filesToRemove = [];
-    for (final dartFile in dartFiles) {
-      if (dartFile.file.path.endsWith('generated_plugin_registrant.dart')) {
-        filesToRemove.add(dartFile);
+    final List<DartFileInfo> filesToRemove = [];
+    for (final dartFileInfo in dartFilesInfo) {
+      if (dartFileInfo.file.path.endsWith('generated_plugin_registrant.dart')) {
+        filesToRemove.add(dartFileInfo);
       }
     }
-    dartFiles.removeWhere((file) => filesToRemove.contains(file));
+    dartFilesInfo.removeWhere((file) => filesToRemove.contains(file));
   }
 
-  stdout.write('┏━━ Sorting ${dartFiles.length} dart files');
+  stdout.write('┏━━ Sorting ${dartFilesInfo.length} dart files');
 
   // Sorting and writing to files
   final sortedFilesPaths = <String>[];
-  final success = '✔'.green();
+  final success = '✔';
 
-  for (final dartFile in dartFiles) {
+  for (final dartFile in dartFilesInfo) {
     final file = dartFile.file;
     final filePath = file.path;
 
     final sortedFile = sort.sortImports(
       file.readAsLinesSync(),
       dartFile.packageName,
-      exitOnChange,
       filePath,
     );
     if (!sortedFile.updated) {

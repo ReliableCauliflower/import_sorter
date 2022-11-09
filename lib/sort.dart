@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:path/path.dart';
 
 /// Sort the imports
@@ -9,7 +7,6 @@ import 'package:path/path.dart';
 ImportSortData sortImports(
   List<String> lines,
   String packageName,
-  bool exitIfChanged,
   String filePath,
 ) {
   final beforeImportLines = <String>[];
@@ -157,9 +154,6 @@ ImportSortData sortImports(
 
   final sortedFile = sortedLines.join('\n');
   final original = lines.join('\n') + '\n';
-  if (exitIfChanged && original != sortedFile) {
-    exit(1);
-  }
   if (original == sortedFile) {
     return ImportSortData(original, false);
   }
